@@ -98,8 +98,7 @@ for eNo = 1:NE
         ex = eps(1); ey = eps(2); ez = eps(3);
         gxy= eps(4); gyz= eps(5); gxz= eps(6);
 
-        eps_eff = sqrt( (4/9)*(ex^2 + ey^2 + ez^2 - ex*ey - ey*ez - ex*ez) ...
-               + (1/3)*(gxy^2 + gyz^2 + gxz^2) );
+        eps_eff = sqrt((ex^2 + ey^2 + ez^2 ));
         eps_eff = max(eps_eff, 0);
 
        %% Saturation material: get equivalent stress and tangent E at this Gauss point
