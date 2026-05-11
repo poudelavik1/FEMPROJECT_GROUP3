@@ -1,54 +1,4 @@
 function plotDeformedMesh(XYZCoord, ELEMCon, u_final, ELEMENT, varargin)
-%PLOTDEFORMEDMESH  Deformed shape with concrete-appropriate stress contours.
-%
-%  All fields are physically meaningful for concrete.
-%  Von Mises is intentionally excluded (it is a steel criterion).
-%
-% -------------------------------------------------------------------------
-%  CONCRETE FIELDS
-% -------------------------------------------------------------------------
-%  'sigma_hd'       Hognestad uniaxial equivalent stress [MPa]
-%                   Same quantity used by the solver for failure.
-%                   Limit = f'c (sigma_max).
-%
-%  'drucker_prager' Drucker-Prager demand/capacity ratio [-]   0 → 1
-%                   Proper 3-D pressure-dependent concrete criterion.
-%                   Accounts for concrete being ~10x weaker in tension.
-%                   D/C = 1.0 means the point is on the failure surface.
-%                   Needs 'fc' and 'ft' parameters.
-%
-%  'principal_max'  Maximum principal stress σ1 [MPa]
-%                   Positive = tension → concrete cracks when σ1 > f't.
-%                   Red zones = cracking risk.
-%
-%  'principal_min'  Minimum principal stress σ3 [MPa]
-%                   Negative = compression → crushing when σ3 < -f'c.
-%                   Blue zones = high compression.
-%
-%  'pressure'       Hydrostatic pressure p = -I1/3 [MPa]
-%                   Positive = net compression (good for concrete).
-%                   Negative = net tension (bad for concrete).
-%
-%  'E_tan'          Tangent modulus [GPa]
-%                   Low E_tan = softened/damaged zone.
-%
-%  'dispMag'        Displacement magnitude [mm]
-%  'dispX/Y/Z'      Component displacements [mm]
-%
-% -------------------------------------------------------------------------
-%  USAGE
-% -------------------------------------------------------------------------
-%  plotDeformedMesh(XYZCoord, ELEMCon, u_final, ELEMENT)
-%  plotDeformedMesh(..., 'Field','drucker_prager','fc',30e6,'ft',3e6)
-%
-%  Name-value options
-%    'Field'       string  — field name (default: 'sigma_hd')
-%    'fc'          [Pa]    — compressive strength (default: 30e6)
-%    'ft'          [Pa]    — tensile strength     (default: 0.1*fc)
-%    'ScaleFactor' scalar  — deformation magnification ([] = auto)
-%    'nContours'   int     — colour bands (default: 20)
-%    'ShowGhost'   logical — undeformed outline (default: true)
-%    'Title'       string  — override figure title (default: [])
 
 %% ========================================================================
 %  Parse inputs
@@ -170,20 +120,34 @@ cb.Label.FontSize = 11;
 cb.FontSize     = 10;
 
 %% Color limits
-if strcmpi(fieldName, 'drucker_prager')
-    clim([0 1]);
-    text(0.02, 0.97, 'D/C = 1.0  \rightarrow  Failure surface', ...
-        'Units','normalized','FontSize',9,'Color',[0.8 0 0], ...
-        'FontWeight','bold','VerticalAlignment','top');
-elseif diverging
+fieldMax = max(nodalField);
+fieldMin = min(nodalField);
+if diverging
     absMax = max(abs(nodalField));
     if absMax < 1e-30; absMax = 1; end
     clim([-absMax, absMax]);
 else
-    cLim = [min(nodalField), max(nodalField)];
+    cLim = [fieldMin, fieldMax];
     if diff(cLim) < 1e-30; cLim = cLim + [-1 1]; end
     clim(cLim);
 end
+
+%% Max / Min annotation — text box in lower-left corner
+if diverging
+    statsStr = sprintf('Max: %+.3f\nMin: %+.3f', fieldMax, fieldMin);
+else
+    statsStr = sprintf('Max: %.3f\nMin: %.3f',   fieldMax, fieldMin);
+end
+text(0.02, 0.04, statsStr, ...
+    'Units',           'normalized', ...
+    'FontSize',        10, ...
+    'FontWeight',      'bold', ...
+    'Color',           [0.10 0.10 0.10], ...
+    'BackgroundColor', [1.00 1.00 0.88], ...
+    'EdgeColor',       [0.50 0.50 0.50], ...
+    'Margin',          4, ...
+    'VerticalAlignment',   'bottom', ...
+    'HorizontalAlignment', 'left');
 
 %% Axes — pbaspect keeps geometry correct without inflating empty space
 %  axis equal in 3D expands all axes to the LARGEST span, creating a huge
@@ -227,8 +191,6 @@ end
 
 drawnow;
 end
-
-
 %% =========================================================================
 %  LOCAL: compute nodal field values
 %% =========================================================================
@@ -247,37 +209,6 @@ switch lower(fieldName)
         nodalField = elemToNode(elemVal, ELEMCon, nNode) * 1e-6;
         cLabel     = 'Hognestad Stress |σ_{hd}| [MPa]';
         cmapFcn    = @jet;
-
-    %----------------------------------------------------------------------
-    % Drucker-Prager D/C ratio — proper 3-D concrete failure criterion
-    %
-    % Calibrated to uniaxial f'c and f't:
-    %   α  = (fc - ft) / ( √3·(fc + ft) )
-    %   k  = ft · (α + 1/√3)
-    %   DP = α·I1 + √J2
-    %   DC = DP / k   (clamped to [0,1]; value = 1 means on failure surface)
-    %----------------------------------------------------------------------
-    case 'drucker_prager'
-        alpha_dp = (fc - ft) / (sqrt(3) * (fc + ft));
-        k_dp     = ft * (alpha_dp + 1/sqrt(3));
-
-        elemVal = zeros(NE,1);
-        for eNo = 1:NE
-            s  = ELEMENT(eNo).stress;           % [8 x 6]
-            I1 = s(:,1) + s(:,2) + s(:,3);
-            J2 = (1/6)*((s(:,1)-s(:,2)).^2 + ...
-                        (s(:,2)-s(:,3)).^2 + ...
-                        (s(:,3)-s(:,1)).^2) + ...
-                 s(:,4).^2 + s(:,5).^2 + s(:,6).^2;
-            dp_stress       = alpha_dp * I1 + sqrt(max(J2, 0));
-            dc              = max(dp_stress / k_dp, 0);   % <0 means inside cap
-            elemVal(eNo)    = mean(dc);
-        end
-        nodalField = min(elemToNode(elemVal, ELEMCon, nNode), 1.0);
-        cLabel     = sprintf('Drucker-Prager D/C  (f''c = %.0f MPa, f''t = %.0f MPa)', ...
-                             fc*1e-6, ft*1e-6);
-        cmapFcn    = @jet;
-
     %----------------------------------------------------------------------
     % Maximum principal stress σ1  (tension indicator)
     % Positive = tension, red = cracking risk
@@ -299,7 +230,6 @@ switch lower(fieldName)
                              ft*1e-6);
         cmapFcn    = @coolwarm;
         diverging  = true;
-
     %----------------------------------------------------------------------
     % Minimum principal stress σ3  (compression indicator)
     % Negative = compression, blue = high compression
@@ -321,34 +251,6 @@ switch lower(fieldName)
                              fc*1e-6);
         cmapFcn    = @coolwarm;
         diverging  = true;
-
-    %----------------------------------------------------------------------
-    % Hydrostatic pressure  p = -I1/3
-    % Positive = net compression (strengthens concrete via confinement)
-    % Negative = net tension (weakens concrete)
-    %----------------------------------------------------------------------
-    case 'pressure'
-        elemVal = zeros(NE,1);
-        for eNo = 1:NE
-            s  = ELEMENT(eNo).stress;
-            I1 = s(:,1) + s(:,2) + s(:,3);
-            elemVal(eNo) = mean(-I1 / 3);
-        end
-        nodalField = elemToNode(elemVal, ELEMCon, nNode) * 1e-6;
-        cLabel     = 'Hydrostatic Pressure p = -I_1/3 [MPa]  (red = compression +)';
-        cmapFcn    = @coolwarm;
-        diverging  = true;
-
-    %----------------------------------------------------------------------
-    % Tangent modulus — softening/damage indicator
-    % Low E_tan (blue end) = material has softened significantly
-    % High E_tan (red end) = still near-elastic
-    %----------------------------------------------------------------------
-    case 'e_tan'
-        elemVal    = arrayfun(@(e) mean(ELEMENT(e).E_tan), 1:NE).';
-        nodalField = elemToNode(elemVal, ELEMCon, nNode) * 1e-9;
-        cLabel     = 'Tangent Modulus E_{tan} [GPa]  (blue = softened / damaged)';
-        cmapFcn    = @(n) flipud(jet(n));   % reversed: blue = low E
 
     %----------------------------------------------------------------------
     % Displacements
@@ -378,12 +280,10 @@ switch lower(fieldName)
 
     otherwise
         error(['plotDeformedMesh: unknown Field ''%s''.\n' ...
-               'Valid: sigma_hd, drucker_prager, principal_max, principal_min,\n' ...
-               '       pressure, E_tan, dispMag, dispX, dispY, dispZ'], fieldName);
+               'Valid: sigma_hd, principal_max, principal_min,\n' ...
+               '       dispMag, dispX, dispY, dispZ'], fieldName);
 end
 end
-
-
 %% =========================================================================
 %  LOCAL: build 3x3 stress tensor from 6-component stress vector
 %  Input order: [sxx syy szz txy tyz txz]
