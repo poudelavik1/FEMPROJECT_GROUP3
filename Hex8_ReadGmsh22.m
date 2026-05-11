@@ -69,9 +69,9 @@ while ~feof(fid)
                 elemType = vals(2);
                 nTags    = vals(3);
                 if elemType == 5   % Hex8
-                    tmpElemIDs(end+1,1) = vals(1);         
-                    tmpTags{end+1,1}    = vals(4:3+nTags); 
-                    tmpConn(end+1,:)    = vals(4+nTags:end); 
+                    tmpElemIDs(end+1,1) = vals(1);         %#ok<AGROW>
+                    tmpTags{end+1,1}    = vals(4:3+nTags); %#ok<AGROW>
+                    tmpConn(end+1,:)    = vals(4+nTags:end); %#ok<AGROW>
                 end
             end
             [ELEMCon, elemTags, elemIDs] = buildConn(tmpConn, tmpTags, tmpElemIDs, nodeIDs);
@@ -140,9 +140,9 @@ while ~feof(fid)
                 for e = 1:nInBlock
                     vals = sscanf(fgetl(fid), '%d')';
                     if elemType == 5   % Hex8 only
-                        tmpElemIDs(end+1,1) = vals(1);      
-                        tmpTags{end+1,1}    = blk_hdr(2);   
-                        tmpConn(end+1,:)    = vals(2:9);    
+                        tmpElemIDs(end+1,1) = vals(1);      %#ok<AGROW>
+                        tmpTags{end+1,1}    = blk_hdr(2);   %#ok<AGROW> entity tag
+                        tmpConn(end+1,:)    = vals(2:9);    %#ok<AGROW>
                     end
                 end
             end

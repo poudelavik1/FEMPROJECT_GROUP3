@@ -1,34 +1,12 @@
-function [ELEMENT, E_tan_elem] = Hex8_ComputeStrainStress(XYZCoord, ELEMCon, ELEMENT, u, E0, nu, sigma_max, varargin)
-%HEX8_COMPUTESTRAINSTRESS  Gauss-point strains, stresses, and tangent E
-%
-%  Called at the end of every Newton-Raphson iteration.
-%  Loops over all elements and Gauss points, computes:
-%    ε  (6-component strain vector)
-%    σ  (6-component stress vector, via tangent D)
-%    E_tan (scalar tangent modulus from NonlinearMaterial)
-%
-%  The tangent E_tan feeds back into the next stiffness assembly.
-%
-%  Inputs
-%    XYZCoord  : [nNode × 3] nodal coordinates
-%    ELEMCon   : [NE × 8]   connectivity (1-based local indices)
-%    ELEMENT   : structure array (fields added: .strain .stress .E_tan)
-%    u         : [3·nNode × 1] current global displacement vector
-%    E0        : initial Young's modulus [Pa]
-%    nu        : Poisson's ratio
-%    sigma_max : saturation stress for NonlinearMaterial [Pa]
-%
-%  Outputs
-%    ELEMENT      : updated structure with per-element Gauss-point data
-%    E_tan_elem   : [NE × 1] element-averaged tangent modulus (for assembly)
+function [ELEMENT, E_tan_elem] = Hex8_ComputeStrainStress(XYZCoord, ELEMCon, ELEMENT, u, E0, nu, sigma_max, eps_0, eps_u)
 
+if nargin < 8 || isempty(eps_0);  eps_0 = 0.002;  end   %#ok<NASGU>
+if nargin < 9 || isempty(eps_u);  eps_u = 0.0035; end   %#ok<NASGU>
 
-E_floor = 1e-4 * E0;
-
-NE = size(ELEMCon, 1);
+NE         = size(ELEMCon, 1);
 E_tan_elem = zeros(NE, 1);
 
-%% Gauss points and sign tables (same as Hex8_ElementStiffness)
+%% Gauss points (2x2x2 full integration)
 g  = 1/sqrt(3);
 gp = [-g -g -g;  g -g -g;  g  g -g; -g  g -g;
       -g -g  g;  g -g  g;  g  g  g; -g  g  g];
@@ -39,28 +17,27 @@ zeta_i = [-1 -1 -1 -1  1  1  1  1];
 
 for eNo = 1:NE
     conn   = ELEMCon(eNo, :);
-    coords = XYZCoord(conn, :);          % [8 × 3]
+    coords = XYZCoord(conn, :);          % [8 x 3]
 
-    %% Build element DOF index vector
+    %% Element DOF indices
     dofIdx = zeros(1, 24);
     for k = 1:8
         n = conn(k);
         dofIdx(3*k-2 : 3*k) = [3*n-2, 3*n-1, 3*n];
     end
-    u_e = u(dofIdx);                     % [24 × 1] element displacements
+    u_e = u(dofIdx);                     % [24 x 1]
 
-    %% Gauss-point loop
-    eps_gp    = zeros(8, 6);
-    sig_gp    = zeros(8, 6);
-    Etan_gp   = zeros(8, 1);
-    sigSAT_gp = zeros(8, 1);   % Saturation equivalent uniaxial stress [Pa]
+    %% ---------------------------------------------------------------
+    %  PASS 1 — compute strain at all 8 GPs, store B matrices
+    %% ---------------------------------------------------------------
+    eps_gp = zeros(8, 6);   % strains at each GP
+    B_gp   = zeros(6, 24, 8);  % B matrix at each GP
 
     for ig = 1:8
         xi   = gp(ig,1);
         eta  = gp(ig,2);
         zeta = gp(ig,3);
 
-        %% Shape function derivatives in natural coordinates
         dN = zeros(3, 8);
         for a = 1:8
             dN(1,a) = 1/8 * xi_i(a)   * (1 + eta_i(a)*eta)   * (1 + zeta_i(a)*zeta);
@@ -68,65 +45,64 @@ for eNo = 1:NE
             dN(3,a) = 1/8 * zeta_i(a) * (1 + xi_i(a)*xi)     * (1 + eta_i(a)*eta);
         end
 
-        J     = dN * coords;              % Jacobian [3×3]
+        J     = dN * coords;
         detJ  = det(J);
         if detJ <= 0
             warning('Element %d, GP %d: non-positive Jacobian (%.4g).', eNo, ig, detJ);
         end
-        dNxyz = J \ dN;                   % physical derivatives [3×8]
+        dNxyz = J \ dN;
 
-        %% B matrix [6 × 24]
         B = zeros(6, 24);
         for a = 1:8
             c  = 3*(a-1) + 1;
             dx = dNxyz(1,a); dy = dNxyz(2,a); dz = dNxyz(3,a);
-            B(:, c:c+2) = [dx 0  0;
-                           0  dy 0;
-                           0  0  dz;
-                           dy dx 0;
-                           0  dz dy;
-                           dz 0  dx];
+            B(:, c:c+2) = [dx  0   0;
+                            0  dy   0;
+                            0   0  dz;
+                           dy  dx   0;
+                            0  dz  dy;
+                           dz   0  dx];
         end
 
-        %% Strain vector [εxx εyy εzz γxy γyz γxz]
-        eps = B * u_e;                    % [6 × 1]
-        eps_gp(ig,:) = eps.';
+        eps_gp(ig,:)   = (B * u_e).';
+        B_gp(:,:,ig)   = B;
+    end
+    % Maximum absolute strain component at each GP  [8 x 1]
+    max_abs_per_gp = max(abs(eps_gp), [], 2);
 
-        %% Effective strain for saturation model
-        %  ε_eff = sqrt[ 2/3*(εxx²+εyy²+εzz²-εxx·εyy-εyy·εzz-εxx·εzz)
-        %               + 1/2*(γxy²+γyz²+γxz²) ]
-        ex = eps(1); ey = eps(2); ez = eps(3);
-        gxy= eps(4); gyz= eps(5); gxz= eps(6);
+    % Element-representative strain = mean over all 8 GPs
+    eps_eff = mean(max_abs_per_gp);
 
-        eps_eff = sqrt((ex^2 + ey^2 + ez^2 ));
-        eps_eff = max(eps_eff, 0);
+    % Single NonlinearMaterial call for the whole element
+    [sigma_hd_elem, E_tan_e] = NonlinearMaterial(eps_eff, E0, sigma_max);
 
-       %% Saturation material: get equivalent stress and tangent E at this Gauss point
-[sigma_sat, E_tan] = NonlinearMaterial(eps_eff, E0, sigma_max);
-
-Etan_gp(ig)  = E_tan;
-sigSAT_gp(ig) = sigma_sat;
-
-%% Secant modulus for actual stress computation
-if eps_eff > 1e-12
-    E_sec = sigma_sat / eps_eff;
-else
-    E_sec = E0;
-end
-E_sec = max(E_sec, E_floor);
-%% Stress tensor using secant D at this Gauss point
-D_sec = Hex8_TangentD(E_sec, nu);
-sig   = D_sec * eps;                    % [6 × 1]
-sig_gp(ig,:) = sig.';
+    % Secant modulus for 3-D stress
+    if eps_eff < 1e-15
+        E_sec = E0;
+    else
+        E_sec = sigma_hd_elem / eps_eff;
     end
 
-    %% Store results in ELEMENT structure
-    ELEMENT(eNo).strain    = eps_gp;     % [8 × 6]
-    ELEMENT(eNo).stress    = sig_gp;     % [8 × 6]
-    ELEMENT(eNo).E_tan     = Etan_gp;    % [8 × 1]
-    ELEMENT(eNo).sigma_sat = sigSAT_gp;  % [8 × 1] saturation equivalent stress [Pa]
-    ELEMENT(eNo).sigma_hd  = sigSAT_gp;  % backward-compatible alias for old plotting code
-    E_tan_elem(eNo) = mean(abs(Etan_gp));
+    % One D matrix for the whole element
+    D_sec = Hex8_TangentD(E_sec, nu);
+
+    %% ---------------------------------------------------------------
+    %  PASS 2 — compute stresses at all 8 GPs using the element-uniform D
+    %% ---------------------------------------------------------------
+    sig_gp   = zeros(8, 6);
+    Etan_gp  = E_tan_e * ones(8, 1);   % same E_tan at every GP
+    sigHD_gp = sigma_hd_elem * ones(8, 1);
+
+    for ig = 1:8
+        sig_gp(ig,:) = (D_sec * eps_gp(ig,:).').';
+    end
+
+    %% Store results
+    ELEMENT(eNo).strain   = eps_gp;    % [8 x 6]
+    ELEMENT(eNo).stress   = sig_gp;    % [8 x 6]  [Pa]
+    ELEMENT(eNo).E_tan = E_sec * ones(8,1);
+    ELEMENT(eNo).sigma_hd = sigHD_gp;  % [8 x 1]  [Pa]  — uniform per element
+    E_tan_elem(eNo)       = E_tan_e;
 end
 
 end

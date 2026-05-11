@@ -79,14 +79,14 @@ if nargin >= 3 && ~isempty(fixedNodes) && ~isempty(XYZCoord)
     Yf = XYZCoord(fixedNodes, 2);
     Zf = XYZCoord(fixedNodes, 3);
 
-    %% Triangle markers
+    %% Triangle markers — LineStyle none prevents the connecting line
     plot3(Xf, Yf, Zf, 'r^', ...
-          'LineStyle',       'none', ...
+          'LineStyle',       'none', ...   % <-- this was the bug
           'MarkerSize',       8, ...
           'LineWidth',        1.5, ...
           'MarkerFaceColor', [1 0.2 0.2]);
 
-    %% Hatch ticks below each fixed node
+    %% Hatch ticks below each node
     hatchLen = 0.04 * (max(Z) - min(Z));
     for i = 1:numel(fixedNodes)
         plot3([Xf(i) Xf(i)], [Yf(i) Yf(i)], [Zf(i) Zf(i)-hatchLen], ...
@@ -94,9 +94,12 @@ if nargin >= 3 && ~isempty(fixedNodes) && ~isempty(XYZCoord)
     end
 
     %% Per-column base rectangle
+    %  Cluster fixed nodes by X so each column gets its OWN small box.
+    %  Using a tolerance of 10% of frame width to separate clusters.
     frameWidth = max(X) - min(X);
     xTol       = 0.10 * frameWidth;
-    xClusters  = uniqueClusters(Xf, xTol);
+
+    xClusters  = uniqueClusters(Xf, xTol);   % column X centres
 
     for c = 1:numel(xClusters)
         inCluster = abs(Xf - xClusters(c)) <= xTol;
@@ -109,6 +112,7 @@ if nargin >= 3 && ~isempty(fixedNodes) && ~isempty(XYZCoord)
 
         plot3(bx, by, bz, 'r-', 'LineWidth', 2.0, 'HandleVisibility','off');
 
+        %% FIXED BASE label centered under each column
         text(mean(xc), min(yc), min(zc) - 2*hatchLen, ...
             'FIXED', ...
             'FontSize',           8, ...
@@ -194,7 +198,7 @@ function centres = uniqueClusters(vals, tol)
     centres = sorted(1);
     for i = 2:numel(sorted)
         if abs(sorted(i) - centres(end)) > tol
-            centres(end+1) = sorted(i); 
+            centres(end+1) = sorted(i); %#ok<AGROW>
         end
     end
 end

@@ -28,7 +28,6 @@ addParameter(p, 'MonitorDOF',   1);
 addParameter(p, 'ScaleFactor',  []);
 addParameter(p, 'FrameDelay',   0.08);
 addParameter(p, 'SaveGif',      '');
-addParameter(p, 'GifQuality',   256);   % colour depth: 2-256
 addParameter(p, 'Fmax',         []);
 parse(p, varargin{:});
 
@@ -37,13 +36,7 @@ monDOF     = p.Results.MonitorDOF;
 scaleFixed = p.Results.ScaleFactor;
 frameDelay = p.Results.FrameDelay;
 gifFile    = p.Results.SaveGif;
-gifQuality = min(max(round(p.Results.GifQuality), 2), 256);
 Fmax       = p.Results.Fmax;
-
-%% Auto-generate GIF filename if user passes true instead of a name
-if islogical(gifFile) && gifFile
-    gifFile = sprintf('animation_%s.gif', datestr(now,'yyyymmdd_HHMMSS'));
-end
 
 nNode  = size(XYZCoord, 1);
 NE     = size(ELEMCon,  1);
@@ -211,7 +204,7 @@ hStepTxt = text(axLD, 0.05, 0.92, '', 'Units','normalized', ...
 %% ========================================================================
 %  GIF initialisation
 %% ========================================================================
-saveGif = ischar(gifFile) && ~isempty(gifFile);
+saveGif = ~isempty(gifFile);
 if saveGif
     fprintf('Saving GIF to: %s\n', gifFile);
 end
@@ -250,18 +243,16 @@ for step = 1:nSteps
 
     %% Save frame to GIF
     if saveGif
-        frame     = getframe(fig);
-        im        = frame2im(frame);
-        [ind, cm] = rgb2ind(im, gifQuality);
+        frame  = getframe(fig);
+        im     = frame2im(frame);
+        [ind, cm] = rgb2ind(im, 128);
         if step == 1
             imwrite(ind, cm, gifFile, 'gif', ...
                 'Loopcount', inf, 'DelayTime', frameDelay);
-            fprintf('[animateLoadSteps]  Saving GIF: %s\n', gifFile);
         else
             imwrite(ind, cm, gifFile, 'gif', ...
                 'WriteMode', 'append', 'DelayTime', frameDelay);
         end
-        fprintf('[animateLoadSteps]  Frame %d / %d saved\n', step, nSteps);
     else
         pause(frameDelay);
     end
@@ -270,17 +261,6 @@ end
 
 %% Final frame — hold for 1 s
 pause(1.0);
-
-%% Write final frame to GIF (held longer so loop doesn't jump)
-if saveGif
-    frame     = getframe(fig);
-    im        = frame2im(frame);
-    [ind, cm] = rgb2ind(im, gifQuality);
-    imwrite(ind, cm, gifFile, 'gif', ...
-        'WriteMode', 'append', 'DelayTime', 1.5);
-    fprintf('[animateLoadSteps]  GIF saved → %s\n', gifFile);
-else
-    fprintf('[animateLoadSteps]  Done.\n');
-end
+fprintf('[animateLoadSteps]  Done.\n');
 
 end

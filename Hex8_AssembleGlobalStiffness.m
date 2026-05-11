@@ -1,18 +1,4 @@
 function KG = Hex8_AssembleGlobalStiffness(ELEMENT, ELEMCon, nNode)
-%HEX8_ASSEMBLEGLOBALSTIFFNESS Assemble the global stiffness matrix for
-% 8-node hexahedral elements with 3 DOF per node: [ux uy uz].
-%
-% Inputs
-%   ELEMENT : structure array with field .stiffness of size [24 x 24]
-%   ELEMCon : [NE x 8] connectivity matrix
-%   nNode   : total number of nodes
-%
-% Output
-%   KG      : [3*nNode x 3*nNode] global stiffness matrix
-%
-% Example
-%   KG = Hex8_AssembleGlobalStiffness(ELEMENT, ELEMCon, size(XYZCoord,1));
-
 NE   = size(ELEMCon,1);
 nDof = nNode * 3;
 KG   = zeros(nDof, nDof);
