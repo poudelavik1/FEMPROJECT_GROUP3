@@ -52,7 +52,7 @@ fprintf('Fixed DOFs  : %d\n', numel(fixedDOF));
 %  Lateral load in X direction at top node(s)
 %% =========================
 loadNodes  = [20 95 24 176 318 179 12 98 16];
-Fmax_total = -2150000;          % N  total reference load
+Fmax_total = -3000000;          % N  total reference load
 F_total    = zeros(nDOF, 1);
 
 F_per_node = Fmax_total / numel(loadNodes);   % -403400/9 = -44822.2 N each
@@ -111,29 +111,8 @@ UX = u_final(1:3:end);
 UY = u_final(2:3:end);
 UZ = u_final(3:3:end);
 
-% %% --- Load-displacement curve -------------------------------------------
-% monitorNode = 318;
-% monitorDOF  = 3*monitorNode - 2;
-% u_top       = U_history(monitorDOF, :);
-% 
-% figure;
-% plot(u_top*1000, F_history/1e3, 'o-', 'LineWidth', 1.5);
-% xlabel('Lateral displacement at node 96 [mm]');
-% ylabel('Applied load [kN]');
-% title('Load-Displacement Curve (HD MODEL)');
-% grid on;
-% hold on;
-% 
-% if ~isempty(failStep)
-%     plot(u_top(end)*1000, F_history(end)/1e3, 'rs', ...
-%         'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', [1 0.3 0.3]);
-%     text(u_top(end)*1000, F_history(end)/1e3, ...
-%         sprintf('  Failure at step %d', failStep), ...
-%         'VerticalAlignment', 'bottom', 'FontSize', 9, 'Color', 'r');
-% end
-% hold off;
 
-%% --- Hognestad stress and tangent modulus summary ----------------------
+%% ---stress and tangent modulus summary ----------------------
 sigma_hd_elem = zeros(NE,1);
 E_tan_elem    = zeros(NE,1);
 
