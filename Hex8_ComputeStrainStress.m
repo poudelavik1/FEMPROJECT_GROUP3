@@ -1,7 +1,4 @@
-function [ELEMENT, E_tan_elem] = Hex8_ComputeStrainStress(XYZCoord, ELEMCon, ELEMENT, u, E0, nu, sigma_max, eps_0, eps_u)
-
-if nargin < 8 || isempty(eps_0);  eps_0 = 0.002;  end   %#ok<NASGU>
-if nargin < 9 || isempty(eps_u);  eps_u = 0.0035; end   %#ok<NASGU>
+function [ELEMENT, E_tan_elem] = Hex8_ComputeStrainStress(XYZCoord, ELEMCon, ELEMENT, u, E0, nu, sigma_max)
 
 NE         = size(ELEMCon, 1);
 E_tan_elem = zeros(NE, 1);

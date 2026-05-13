@@ -28,9 +28,6 @@ fprintf('Nodes: %d  |  Elements: %d  |  DOFs: %d\n', nNode, NE, nDOF);
 E0        = 30e9;    % Pa   initial Young's modulus  (30 GPa)
 nu        = 0.18;    % -    Poisson's ratio
 sigma_max = 35e6;    % Pa   compressive strength f'c  (30 MPa)
-eps_0     = 0.002;   % -    strain at peak stress  (Hognestad)
-eps_u     = 0.0035;  % -    ultimate crushing strain
-
 %% =========================
 %  BOUNDARY CONDITIONS
 %% =========================
@@ -73,7 +70,7 @@ plotmesh(excelFile, XYZCoord, fixedNodes, loadNodes)
 %% =========================
 nSteps  = 100;     %load increment per step
 maxIter = 50;      % NR max iterations per step
-nrTol   = 1e-3;   % NR convergence tolerance
+nrTol   = 0;   % NR convergence tolerance
 
 fprintf('Load steps : %d\n', nSteps);
 

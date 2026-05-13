@@ -207,7 +207,7 @@ switch lower(fieldName)
     case 'sigma_hd'
         elemVal    = arrayfun(@(e) mean(abs(ELEMENT(e).sigma_hd)), 1:NE).';
         nodalField = elemToNode(elemVal, ELEMCon, nNode) * 1e-6;
-        cLabel     = 'Hognestad Stress |σ_{hd}| [MPa]';
+        cLabel     = ' Stress |σ_{hd}| [MPa]';
         cmapFcn    = @jet;
     %----------------------------------------------------------------------
     % Maximum principal stress σ1  (tension indicator)
